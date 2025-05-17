@@ -1,0 +1,16 @@
+BINARY=bin/server
+CMD=./cmd/server
+
+.PHONY: all clean build run
+
+all: build
+
+build:
+	mkdir -p bin
+	go build -o $(BINARY) $(CMD)
+
+run:
+	go run $(CMD)
+
+clean:
+	rm -rf bin
