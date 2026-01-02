@@ -24,3 +24,8 @@ go.work.sum
 # env file
 .env
 bin/
+
+# AGENTS
+
+AGENTS.md
+CLAUDE.md
