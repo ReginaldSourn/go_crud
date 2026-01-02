@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/reginaldsourn/go-crud/migrations"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -36,6 +37,9 @@ func main() {
 		sqlDB.SetConnMaxLifetime(30 * time.Minute)
 		if err := sqlDB.Ping(); err != nil {
 			log.Fatalf("db ping failed: %v", err)
+		}
+		if err := migrations.Run(db); err != nil {
+			log.Fatalf("db migrate failed: %v", err)
 		}
 		defer sqlDB.Close()
 	} else {
