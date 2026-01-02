@@ -8,6 +8,9 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -16,6 +19,27 @@ func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
+	}
+
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn != "" {
+		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		if err != nil {
+			log.Fatalf("db connect failed: %v", err)
+		}
+		sqlDB, err := db.DB()
+		if err != nil {
+			log.Fatalf("db handle failed: %v", err)
+		}
+		sqlDB.SetMaxOpenConns(10)
+		sqlDB.SetMaxIdleConns(5)
+		sqlDB.SetConnMaxLifetime(30 * time.Minute)
+		if err := sqlDB.Ping(); err != nil {
+			log.Fatalf("db ping failed: %v", err)
+		}
+		defer sqlDB.Close()
+	} else {
+		log.Printf("DATABASE_URL not set; running without a database")
 	}
 
 	srv := &http.Server{
