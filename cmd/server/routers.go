@@ -2,55 +2,33 @@ package main
 
 import (
 	"go/version"
+	"log"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/reginaldsourn/go-crud/internal/auth"
 	"github.com/reginaldsourn/go-crud/internal/handlers"
+	"github.com/reginaldsourn/go-crud/internal/middlewares"
 	"github.com/reginaldsourn/go-crud/internal/store"
 )
-
-func authMiddleware(secret []byte) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing Authorization header"})
-			return
-		}
-
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid Authorization header"})
-			return
-		}
-
-		claims, err := auth.ParseToken(parts[1], secret)
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
-			return
-		}
-
-		c.Set("username", claims.Sub)
-		c.Next()
-	}
-}
 
 func SetupRouter() *gin.Engine {
 	// Create a new Gin router
 	router := gin.Default()
-
+	// Load environment variables from .env (optional)
+	if err := godotenv.Load(); err != nil {
+		log.Println("no .env file found; using existing environment variables")
+	}
 	users := store.NewInMemoryUserStore()
 	userHandler := handlers.NewUserHandler(users)
 	secret := []byte(os.Getenv("JWT_SECRET"))
-	if len(secret) == 0 {
-		secret = []byte("dev-secret-change-me")
-	}
 
+	log.Println("JWT_SECRET length:", len(secret))
 	// Define a simple GET endpoint
 	router.GET("/hello", func(c *gin.Context) {
 		c.JSON(200, gin.H{
@@ -141,14 +119,14 @@ func SetupRouter() *gin.Engine {
 			})
 		})
 
-		api.GET("/me", authMiddleware(secret), func(c *gin.Context) {
+		api.GET("/me", middlewares.AuthMiddleware(secret), func(c *gin.Context) {
 			username, _ := c.Get("username")
 			c.JSON(http.StatusOK, gin.H{
 				"username": username,
 			})
 		})
 
-		usersAPI := api.Group("/users", authMiddleware(secret))
+		usersAPI := api.Group("/users", middlewares.AuthMiddleware(secret))
 		{
 			usersAPI.POST("", userHandler.Create)
 			usersAPI.GET("", userHandler.List)
