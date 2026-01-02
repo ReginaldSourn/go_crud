@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 
 	"github.com/reginaldsourn/go-crud/internal/auth"
 	"github.com/reginaldsourn/go-crud/internal/handlers"
@@ -17,14 +18,20 @@ import (
 	"github.com/reginaldsourn/go-crud/internal/store"
 )
 
-func SetupRouter() *gin.Engine {
+func SetupRouter(db *gorm.DB) *gin.Engine {
 	// Create a new Gin router
 	router := gin.Default()
 	// Load environment variables from .env (optional)
 	if err := godotenv.Load(); err != nil {
 		log.Println("no .env file found; using existing environment variables")
 	}
-	users := store.NewInMemoryUserStore()
+
+	var users store.UserStore
+	if db != nil {
+		users = store.NewGormUserStore(db)
+	} else {
+		users = store.NewInMemoryUserStore()
+	}
 	userHandler := handlers.NewUserHandler(users)
 	secret := []byte(os.Getenv("JWT_SECRET"))
 

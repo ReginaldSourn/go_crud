@@ -9,22 +9,27 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/reginaldsourn/go-crud/migrations"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 func main() {
-	router := SetupRouter()
+	if err := godotenv.Load(); err != nil {
+		log.Println("no .env file found; using existing environment variables")
+	}
 
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
+	var db *gorm.DB
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn != "" {
-		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		var err error
+		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 		if err != nil {
 			log.Fatalf("db connect failed: %v", err)
 		}
@@ -45,6 +50,8 @@ func main() {
 	} else {
 		log.Printf("DATABASE_URL not set; running without a database")
 	}
+
+	router := SetupRouter(db)
 
 	srv := &http.Server{
 		Addr:              ":" + port,
