@@ -9,6 +9,7 @@ import (
 
 	"github.com/reginaldsourn/go-crud/internal/core/domain"
 	"github.com/reginaldsourn/go-crud/internal/core/ports"
+	pkg "github.com/reginaldsourn/go-crud/pkg/error"
 )
 
 type gormUserStore struct {
@@ -21,7 +22,7 @@ func NewGormUserStore(db *gorm.DB) ports.UserStore {
 
 func (s *gormUserStore) Create(ctx context.Context, username string, passwordHash []byte) (domain.User, error) {
 	if username == "" {
-		return domain.User{}, ports.ErrInvalidUsername
+		return domain.User{}, pkg.ErrInvalidUsername
 	}
 
 	u := domain.User{
@@ -31,7 +32,7 @@ func (s *gormUserStore) Create(ctx context.Context, username string, passwordHas
 	}
 	if err := s.db.WithContext(ctx).Create(&u).Error; err != nil {
 		if isUniqueViolation(err) {
-			return domain.User{}, ports.ErrUsernameExists
+			return domain.User{}, pkg.ErrUsernameExists
 		}
 		return domain.User{}, err
 	}
@@ -43,7 +44,7 @@ func (s *gormUserStore) GetByID(ctx context.Context, id int64) (domain.User, err
 	var u domain.User
 	if err := s.db.WithContext(ctx).First(&u, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return domain.User{}, ports.ErrUserNotFound
+			return domain.User{}, pkg.ErrUserNotFound
 		}
 		return domain.User{}, err
 	}
@@ -54,7 +55,7 @@ func (s *gormUserStore) GetByUsername(ctx context.Context, username string) (dom
 	var u domain.User
 	if err := s.db.WithContext(ctx).Where("username = ?", username).First(&u).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return domain.User{}, ports.ErrUserNotFound
+			return domain.User{}, pkg.ErrUserNotFound
 		}
 		return domain.User{}, err
 	}
@@ -73,7 +74,7 @@ func (s *gormUserStore) Update(ctx context.Context, id int64, username string, p
 	var u domain.User
 	if err := s.db.WithContext(ctx).First(&u, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return domain.User{}, ports.ErrUserNotFound
+			return domain.User{}, pkg.ErrUserNotFound
 		}
 		return domain.User{}, err
 	}
@@ -88,7 +89,7 @@ func (s *gormUserStore) Update(ctx context.Context, id int64, username string, p
 
 	if err := s.db.WithContext(ctx).Save(&u).Error; err != nil {
 		if isUniqueViolation(err) {
-			return domain.User{}, ports.ErrUsernameExists
+			return domain.User{}, pkg.ErrUsernameExists
 		}
 		return domain.User{}, err
 	}
@@ -102,7 +103,7 @@ func (s *gormUserStore) Delete(ctx context.Context, id int64) error {
 		return res.Error
 	}
 	if res.RowsAffected == 0 {
-		return ports.ErrUserNotFound
+		return pkg.ErrUserNotFound
 	}
 	return nil
 }

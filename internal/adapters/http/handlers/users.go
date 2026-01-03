@@ -10,6 +10,7 @@ import (
 
 	"github.com/reginaldsourn/go-crud/internal/core/domain"
 	"github.com/reginaldsourn/go-crud/internal/core/ports"
+	pkg "github.com/reginaldsourn/go-crud/pkg/error"
 )
 
 type UserHandler struct {
@@ -55,7 +56,7 @@ func (h *UserHandler) Create(c *gin.Context) {
 	u, err := h.store.Create(c.Request.Context(), req.Username, passwordHash)
 	if err != nil {
 		status := http.StatusBadRequest
-		if err == ports.ErrUsernameExists {
+		if err == pkg.ErrUsernameExists {
 			status = http.StatusConflict
 		}
 		c.JSON(status, gin.H{"error": err.Error()})
@@ -141,9 +142,9 @@ func (h *UserHandler) Update(c *gin.Context) {
 	u, err := h.store.Update(c.Request.Context(), id, username, passwordHash)
 	if err != nil {
 		status := http.StatusBadRequest
-		if err == ports.ErrUserNotFound {
+		if err == pkg.ErrUserNotFound {
 			status = http.StatusNotFound
-		} else if err == ports.ErrUsernameExists {
+		} else if err == pkg.ErrUsernameExists {
 			status = http.StatusConflict
 		}
 		c.JSON(status, gin.H{"error": err.Error()})

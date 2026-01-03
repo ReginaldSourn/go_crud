@@ -2,15 +2,8 @@ package ports
 
 import (
 	"context"
-	"errors"
 
 	"github.com/reginaldsourn/go-crud/internal/core/domain"
-)
-
-var (
-	ErrUserNotFound    = errors.New("user not found")
-	ErrUsernameExists  = errors.New("username already exists")
-	ErrInvalidUsername = errors.New("invalid username")
 )
 
 type UserStore interface {

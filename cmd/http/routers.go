@@ -17,6 +17,7 @@ import (
 	"github.com/reginaldsourn/go-crud/internal/adapters/http/handlers"
 	"github.com/reginaldsourn/go-crud/internal/adapters/http/middlewares"
 	"github.com/reginaldsourn/go-crud/internal/core/ports"
+	pkg "github.com/reginaldsourn/go-crud/pkg/error"
 )
 
 func SetupRouter(db *gorm.DB) *gin.Engine {
@@ -79,7 +80,7 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 			u, err := users.Create(c.Request.Context(), req.Username, passwordHash)
 			if err != nil {
 				status := http.StatusBadRequest
-				if err == ports.ErrUsernameExists {
+				if err == pkg.ErrUsernameExists {
 					status = http.StatusConflict
 				}
 				c.JSON(status, gin.H{"error": err.Error()})
