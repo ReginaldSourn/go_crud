@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/reginaldsourn/go-crud/internal/auth"
+	"github.com/reginaldsourn/go-crud/internal/adapters/auth"
 )
 
 // AuthMiddleware validates JWT and stores the username in the request context.

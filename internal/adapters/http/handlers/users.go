@@ -8,14 +8,15 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/reginaldsourn/go-crud/internal/store"
+	"github.com/reginaldsourn/go-crud/internal/core/domain"
+	"github.com/reginaldsourn/go-crud/internal/core/ports"
 )
 
 type UserHandler struct {
-	store store.UserStore
+	store ports.UserStore
 }
 
-func NewUserHandler(s store.UserStore) *UserHandler {
+func NewUserHandler(s ports.UserStore) *UserHandler {
 	return &UserHandler{store: s}
 }
 
@@ -26,7 +27,7 @@ type userResponse struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
-func toUserResponse(u store.User) userResponse {
+func toUserResponse(u domain.User) userResponse {
 	return userResponse{
 		ID:        u.ID,
 		Username:  u.Username,
@@ -54,7 +55,7 @@ func (h *UserHandler) Create(c *gin.Context) {
 	u, err := h.store.Create(c.Request.Context(), req.Username, passwordHash)
 	if err != nil {
 		status := http.StatusBadRequest
-		if err == store.ErrUsernameExists {
+		if err == ports.ErrUsernameExists {
 			status = http.StatusConflict
 		}
 		c.JSON(status, gin.H{"error": err.Error()})
@@ -140,9 +141,9 @@ func (h *UserHandler) Update(c *gin.Context) {
 	u, err := h.store.Update(c.Request.Context(), id, username, passwordHash)
 	if err != nil {
 		status := http.StatusBadRequest
-		if err == store.ErrUserNotFound {
+		if err == ports.ErrUserNotFound {
 			status = http.StatusNotFound
-		} else if err == store.ErrUsernameExists {
+		} else if err == ports.ErrUsernameExists {
 			status = http.StatusConflict
 		}
 		c.JSON(status, gin.H{"error": err.Error()})

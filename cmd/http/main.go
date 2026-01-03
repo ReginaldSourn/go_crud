@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	"github.com/reginaldsourn/go-crud/migrations"
+	"github.com/reginaldsourn/go-crud/internal/adapters/db/migrations"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )

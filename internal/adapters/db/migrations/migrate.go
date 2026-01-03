@@ -3,7 +3,7 @@ package migrations
 import (
 	"fmt"
 
-	"github.com/reginaldsourn/go-crud/internal/model"
+	"github.com/reginaldsourn/go-crud/internal/core/domain"
 	"gorm.io/gorm"
 )
 
@@ -13,7 +13,7 @@ func Run(db *gorm.DB) error {
 		return fmt.Errorf("db is nil")
 	}
 
-	if err := db.AutoMigrate(&model.User{}); err != nil {
+	if err := db.AutoMigrate(&domain.User{}); err != nil {
 		return fmt.Errorf("auto migrate users: %w", err)
 	}
 

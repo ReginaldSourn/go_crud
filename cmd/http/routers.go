@@ -12,10 +12,11 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
-	"github.com/reginaldsourn/go-crud/internal/auth"
-	"github.com/reginaldsourn/go-crud/internal/handlers"
-	"github.com/reginaldsourn/go-crud/internal/middlewares"
-	"github.com/reginaldsourn/go-crud/internal/store"
+	"github.com/reginaldsourn/go-crud/internal/adapters/auth"
+	dbadapter "github.com/reginaldsourn/go-crud/internal/adapters/db"
+	"github.com/reginaldsourn/go-crud/internal/adapters/http/handlers"
+	"github.com/reginaldsourn/go-crud/internal/adapters/http/middlewares"
+	"github.com/reginaldsourn/go-crud/internal/core/ports"
 )
 
 func SetupRouter(db *gorm.DB) *gin.Engine {
@@ -26,9 +27,9 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 		log.Println("no .env file found; using existing environment variables")
 	}
 
-	var users store.UserStore
+	var users ports.UserStore
 	if db != nil {
-		users = store.NewGormUserStore(db)
+		users = dbadapter.NewGormUserStore(db)
 	}
 	userHandler := handlers.NewUserHandler(users)
 	secret := []byte(os.Getenv("JWT_SECRET"))
@@ -78,7 +79,7 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 			u, err := users.Create(c.Request.Context(), req.Username, passwordHash)
 			if err != nil {
 				status := http.StatusBadRequest
-				if err == store.ErrUsernameExists {
+				if err == ports.ErrUsernameExists {
 					status = http.StatusConflict
 				}
 				c.JSON(status, gin.H{"error": err.Error()})

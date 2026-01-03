@@ -1,5 +1,5 @@
 BINARY=bin/server
-CMD=./cmd/server
+CMD=./cmd/http
 
 .PHONY: all clean build run
 
