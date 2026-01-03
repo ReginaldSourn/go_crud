@@ -14,8 +14,20 @@
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
+# TLS / mTLS
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+certs/private/
+secrets/
+
 # Dependency directories (remove the comment below to include it)
 # vendor/
+# Allow public CA / test certs if needed
+!certs/ca.crt
+!certs/dev-client.crt
 
 # Go workspace file
 go.work

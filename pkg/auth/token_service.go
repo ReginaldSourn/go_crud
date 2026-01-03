@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	sharedauth "github.com/reginaldsourn/go-crud/pkg/auth"
 )
 
 var (
@@ -18,11 +16,23 @@ var (
 	ErrExpiredToken = errors.New("token expired")
 )
 
-func GenerateToken(subject string, secret []byte, ttl time.Duration) (string, error) {
-	if len(secret) == 0 {
-		return "", errors.New("secret is required")
-	}
+// TokenService issues and validates HS256 JWTs for this service.
+type TokenService struct {
+	secret []byte
+	ttl    time.Duration
+}
 
+func NewTokenService(secret []byte, ttl time.Duration) (*TokenService, error) {
+	if len(secret) == 0 {
+		return nil, errors.New("secret is required")
+	}
+	if ttl <= 0 {
+		return nil, errors.New("ttl must be positive")
+	}
+	return &TokenService{secret: secret, ttl: ttl}, nil
+}
+
+func (s *TokenService) GenerateToken(subject string) (string, error) {
 	headerJSON, err := json.Marshal(map[string]string{
 		"alg": "HS256",
 		"typ": "JWT",
@@ -32,9 +42,9 @@ func GenerateToken(subject string, secret []byte, ttl time.Duration) (string, er
 	}
 
 	now := time.Now().Unix()
-	payload := sharedauth.Claims{
+	payload := Claims{
 		Sub: subject,
-		Exp: time.Now().Add(ttl).Unix(),
+		Exp: time.Now().Add(s.ttl).Unix(),
 		Iat: now,
 	}
 	payloadJSON, err := json.Marshal(payload)
@@ -46,38 +56,34 @@ func GenerateToken(subject string, secret []byte, ttl time.Duration) (string, er
 	body := base64.RawURLEncoding.EncodeToString(payloadJSON)
 	unsigned := header + "." + body
 
-	signature := signHS256(unsigned, secret)
+	signature := signHS256(unsigned, s.secret)
 	return unsigned + "." + signature, nil
 }
 
-func ParseToken(token string, secret []byte) (sharedauth.Claims, error) {
-	if len(secret) == 0 {
-		return sharedauth.Claims{}, errors.New("secret is required")
-	}
-
+func (s *TokenService) ParseToken(token string) (Claims, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
-		return sharedauth.Claims{}, ErrInvalidToken
+		return Claims{}, ErrInvalidToken
 	}
 
 	unsigned := parts[0] + "." + parts[1]
-	expected := signHS256(unsigned, secret)
+	expected := signHS256(unsigned, s.secret)
 	if !hmac.Equal([]byte(expected), []byte(parts[2])) {
-		return sharedauth.Claims{}, ErrInvalidToken
+		return Claims{}, ErrInvalidToken
 	}
 
 	payloadJSON, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return sharedauth.Claims{}, ErrInvalidToken
+		return Claims{}, ErrInvalidToken
 	}
 
-	var claims sharedauth.Claims
+	var claims Claims
 	if err := json.Unmarshal(payloadJSON, &claims); err != nil {
-		return sharedauth.Claims{}, ErrInvalidToken
+		return Claims{}, ErrInvalidToken
 	}
 
 	if time.Now().Unix() > claims.Exp {
-		return sharedauth.Claims{}, ErrExpiredToken
+		return Claims{}, ErrExpiredToken
 	}
 
 	return claims, nil
