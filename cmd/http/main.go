@@ -3,14 +3,17 @@ package main
 import (
 	"context"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/joho/godotenv"
-	"github.com/reginaldsourn/go-crud/internal/adapters/db/migrations"
+	"github.com/reginaldsourn/go-crud/config"
+	"github.com/reginaldsourn/go-crud/internal/adapters/primary/http"
+	dbadapter "github.com/reginaldsourn/go-crud/internal/adapters/secondary/db"
+	"github.com/reginaldsourn/go-crud/internal/adapters/secondary/db/migrations"
+	"github.com/reginaldsourn/go-crud/internal/core/ports"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -20,9 +23,9 @@ func main() {
 		log.Println("no .env file found; using existing environment variables")
 	}
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("config load failed: %v", err)
 	}
 
 	var db *gorm.DB
@@ -51,28 +54,22 @@ func main() {
 		log.Printf("DATABASE_URL not set; running without a database")
 	}
 
-	router := SetupRouter(db)
-
-	srv := &http.Server{
-		Addr:              ":" + port,
-		Handler:           router,
-		ReadHeaderTimeout: 5 * time.Second,
+	var usersStore ports.UserStore
+	if db != nil {
+		usersStore = dbadapter.NewGormUserStore(db)
 	}
 
-	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("server failed: %v", err)
-		}
-	}()
+	router := http.NewRouter(http.RouterDependencies{
+		UserStore: usersStore,
+		JWTSecret: []byte(cfg.JWTSecret),
+		JWTTTL:    cfg.JWTTTL,
+	})
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-	<-stop
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := srv.Shutdown(ctx); err != nil {
+	addr := ":" + cfg.Port
+	if err := http.Serve(ctx, addr, router); err != nil {
 		log.Printf("server shutdown error: %v", err)
 	}
 }
