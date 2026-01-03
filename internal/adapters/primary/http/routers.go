@@ -1,53 +1,53 @@
-package main
+package http
 
 import (
 	"go/version"
-	"log"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
 
 	"github.com/reginaldsourn/go-crud/internal/adapters/auth"
-	dbadapter "github.com/reginaldsourn/go-crud/internal/adapters/db"
-	"github.com/reginaldsourn/go-crud/internal/adapters/http/handlers"
-	"github.com/reginaldsourn/go-crud/internal/adapters/http/middlewares"
+	httphandlers "github.com/reginaldsourn/go-crud/internal/adapters/http/handlers"
+	"github.com/reginaldsourn/go-crud/internal/adapters/primary/http/middleware"
 	"github.com/reginaldsourn/go-crud/internal/core/ports"
 	pkg "github.com/reginaldsourn/go-crud/pkg/error"
 )
 
-func SetupRouter(db *gorm.DB) *gin.Engine {
-	// Create a new Gin router
-	router := gin.Default()
-	// Load environment variables from .env (optional)
-	if err := godotenv.Load(); err != nil {
-		log.Println("no .env file found; using existing environment variables")
+type RouterDependencies struct {
+	UserStore ports.UserStore
+	JWTSecret []byte
+	JWTTTL    time.Duration
+}
+
+func NewRouter(deps RouterDependencies) *gin.Engine {
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.Use(middleware.Logging())
+	router.Use(middleware.CORS(middleware.CORSOptions{}))
+
+	userStoreAvailable := deps.UserStore != nil
+	var userHandler *httphandlers.UserHandler
+	if userStoreAvailable {
+		userHandler = httphandlers.NewUserHandler(deps.UserStore)
 	}
 
-	var users ports.UserStore
-	if db != nil {
-		users = dbadapter.NewGormUserStore(db)
+	ttl := deps.JWTTTL
+	if ttl <= 0 {
+		ttl = 24 * time.Hour
 	}
-	userHandler := handlers.NewUserHandler(users)
-	secret := []byte(os.Getenv("JWT_SECRET"))
 
-	log.Println("JWT_SECRET length:", len(secret))
-	// Define a simple GET endpoint
 	router.GET("/hello", func(c *gin.Context) {
-		c.JSON(200, gin.H{
+		c.JSON(http.StatusOK, gin.H{
 			"message": "Hello, World!",
 		})
 	})
-	v := "v1"
 
-	// Versions endpoint (uses go/version to validate/parse a Go toolchain version string)
+	v := "v1"
 	router.GET("/versions", func(c *gin.Context) {
 		toolchain := "go1.22.0"
-		c.JSON(200, gin.H{
+		c.JSON(http.StatusOK, gin.H{
 			"api": v,
 			"go": gin.H{
 				"toolchain": toolchain,
@@ -57,17 +57,20 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 		})
 	})
 
-	// API v1 routes
 	api := router.Group("/api/" + v)
 	{
-		// Register route
 		api.POST("/register", func(c *gin.Context) {
+			if !userStoreAvailable {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "user store not configured"})
+				return
+			}
+
 			var req struct {
 				Username string `json:"username" binding:"required"`
 				Password string `json:"password" binding:"required"`
 			}
 			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(400, gin.H{"error": err.Error()})
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
 
@@ -77,7 +80,7 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 				return
 			}
 
-			u, err := users.Create(c.Request.Context(), req.Username, passwordHash)
+			u, err := deps.UserStore.Create(c.Request.Context(), req.Username, passwordHash)
 			if err != nil {
 				status := http.StatusBadRequest
 				if err == pkg.ErrUsernameExists {
@@ -93,18 +96,22 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 			})
 		})
 
-		// Login route
 		api.POST("/login", func(c *gin.Context) {
+			if !userStoreAvailable {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "user store not configured"})
+				return
+			}
+
 			var req struct {
 				Username string `json:"username" binding:"required"`
 				Password string `json:"password" binding:"required"`
 			}
 			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(400, gin.H{"error": err.Error()})
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
 
-			u, err := users.GetByUsername(c.Request.Context(), req.Username)
+			u, err := deps.UserStore.GetByUsername(c.Request.Context(), req.Username)
 			if err != nil {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 				return
@@ -114,7 +121,7 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 				return
 			}
 
-			token, err := auth.GenerateToken(u.Username, secret, 24*time.Hour)
+			token, err := auth.GenerateToken(u.Username, deps.JWTSecret, ttl)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to issue token"})
 				return
@@ -126,22 +133,31 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 			})
 		})
 
-		api.GET("/me", middlewares.AuthMiddleware(secret), func(c *gin.Context) {
+		api.GET("/me", middleware.AuthMiddleware(deps.JWTSecret), func(c *gin.Context) {
 			username, _ := c.Get("username")
 			c.JSON(http.StatusOK, gin.H{
 				"username": username,
 			})
 		})
 
-		usersAPI := api.Group("/users", middlewares.AuthMiddleware(secret))
+		usersAPI := api.Group("/users", middleware.AuthMiddleware(deps.JWTSecret))
 		{
-			usersAPI.POST("", userHandler.Create)
-			usersAPI.GET("", userHandler.List)
-			usersAPI.GET("/:id", userHandler.Get)
-			usersAPI.PUT("/:id", userHandler.Update)
-			usersAPI.DELETE("/:id", userHandler.Delete)
+			if userStoreAvailable {
+				usersAPI.POST("", userHandler.Create)
+				usersAPI.GET("", userHandler.List)
+				usersAPI.GET("/:id", userHandler.Get)
+				usersAPI.PUT("/:id", userHandler.Update)
+				usersAPI.DELETE("/:id", userHandler.Delete)
+			} else {
+				usersAPI.Any("", serviceUnavailable)
+				usersAPI.Any("/:id", serviceUnavailable)
+			}
 		}
 	}
 
 	return router
+}
+
+func serviceUnavailable(c *gin.Context) {
+	c.JSON(http.StatusServiceUnavailable, gin.H{"error": "user store not configured"})
 }
