@@ -29,8 +29,6 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 	var users store.UserStore
 	if db != nil {
 		users = store.NewGormUserStore(db)
-	} else {
-		users = store.NewInMemoryUserStore()
 	}
 	userHandler := handlers.NewUserHandler(users)
 	secret := []byte(os.Getenv("JWT_SECRET"))
