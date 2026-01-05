@@ -8,8 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/reginaldsourn/go-crud/internal/adapters/auth"
 	httphandlers "github.com/reginaldsourn/go-crud/internal/adapters/http/handlers"
+	primaryhandlers "github.com/reginaldsourn/go-crud/internal/adapters/primary/http/handlers"
 	"github.com/reginaldsourn/go-crud/internal/adapters/primary/http/middleware"
 	"github.com/reginaldsourn/go-crud/internal/core/ports"
 	pkg "github.com/reginaldsourn/go-crud/pkg/error"
@@ -29,6 +29,7 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 
 	userStoreAvailable := deps.UserStore != nil
 	var userHandler *httphandlers.UserHandler
+	var authHandler *primaryhandlers.AuthHandler
 	if userStoreAvailable {
 		userHandler = httphandlers.NewUserHandler(deps.UserStore)
 	}
@@ -36,6 +37,9 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 	ttl := deps.JWTTTL
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
+	}
+	if userStoreAvailable {
+		authHandler = primaryhandlers.NewAuthHandler(deps.UserStore, deps.JWTSecret, ttl)
 	}
 
 	router.GET("/hello", func(c *gin.Context) {
@@ -96,42 +100,13 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 			})
 		})
 
-		api.POST("/login", func(c *gin.Context) {
-			if !userStoreAvailable {
-				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "user store not configured"})
-				return
-			}
-
-			var req struct {
-				Username string `json:"username" binding:"required"`
-				Password string `json:"password" binding:"required"`
-			}
-			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-
-			u, err := deps.UserStore.GetByUsername(c.Request.Context(), req.Username)
-			if err != nil {
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
-				return
-			}
-			if err := bcrypt.CompareHashAndPassword(u.PasswordHash, []byte(req.Password)); err != nil {
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
-				return
-			}
-
-			token, err := auth.GenerateToken(u.Username, deps.JWTSecret, ttl)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to issue token"})
-				return
-			}
-
-			c.JSON(http.StatusOK, gin.H{
-				"token":    token,
-				"username": u.Username,
-			})
-		})
+		if userStoreAvailable {
+			api.POST("/login", authHandler.Login)
+			api.POST("/logout", middleware.AuthMiddleware(deps.JWTSecret), authHandler.Logout)
+		} else {
+			api.POST("/login", serviceUnavailable)
+			api.POST("/logout", serviceUnavailable)
+		}
 
 		api.GET("/me", middleware.AuthMiddleware(deps.JWTSecret), func(c *gin.Context) {
 			username, _ := c.Get("username")
