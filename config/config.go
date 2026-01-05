@@ -40,4 +40,5 @@ func parseDurationDefault(key string, fallback time.Duration) time.Duration {
 		}
 	}
 	return fallback
+
 }
