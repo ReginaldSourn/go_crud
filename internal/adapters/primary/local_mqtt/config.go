@@ -1,16 +1,9 @@
 package local_mqtt
 
 import (
-	"context"
-	"log"
 	"os"
-	"os/signal"
-	"syscall"
+	"strconv"
 	"time"
-
-	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/joho/godotenv"
-	"github.com/reginaldsourn/go-crud/internal/core/ports"
 )
 
 type Config struct {
@@ -22,52 +15,46 @@ type Config struct {
 	QoS         byte
 	KeepAlive   time.Duration
 	PingTimeout time.Duration
-	Store       ports.MQTTStore
 }
 
-func NewDefaultConfig(store ports.MQTTStore) Config {
-
-	if err := godotenv.Load(); err != nil {
-		log.Println("no .env file found; using existing environment variables")
+func NewConfig() Config {
+	return Config{
+		Broker:      getenvDefault("MQTT_BROKER", "tcp://localhost"),
+		Port:        getenvIntDefault("MQTT_PORT", 1883),
+		ClientID:    getenvDefault("MQTT_CLIENT_ID", "server-mqtt"),
+		Username:    os.Getenv("MQTT_USERNAME"),
+		Password:    os.Getenv("MQTT_PASSWORD"),
+		QoS:         byte(getenvIntDefault("MQTT_QOS", 1)),
+		KeepAlive:   getenvDurationDefault("MQTT_KEEPALIVE", 30*time.Second),
+		PingTimeout: getenvDurationDefault("MQTT_PING_TIMEOUT", 10*time.Second),
 	}
+}
 
-	broker := getenvDefault("MQTT_BROKER", "tcp://localhost:1883")
-	clientID := getenvDefault("MQTT_CLIENT_ID", "server-mqtt")
-	username := os.Getenv("MQTT_USERNAME")
-	password := os.Getenv("MQTT_PASSWORD")
-	log.Println("mqtt connecting to broker:", broker)
-	opts := mqtt.NewClientOptions().
-		AddBroker(broker).
-		SetClientID(clientID).
-		SetUsername(username).
-		SetPassword(password).
-		SetKeepAlive(30 * time.Second).
-		SetPingTimeout(10 * time.Second).
-		SetAutoReconnect(true).
-		SetConnectRetry(true).
-		SetConnectRetryInterval(5 * time.Second)
+func (c Config) BrokerURL() string {
+	return c.Broker + ":" + strconv.Itoa(c.Port)
+}
 
-	opts.OnConnect = func(c mqtt.Client) {
-		log.Printf("mqtt connected: broker=%s client_id=%s", broker, clientID)
+func getenvDefault(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
 	}
-	opts.OnConnectionLost = func(c mqtt.Client, err error) {
-		log.Printf("mqtt connection lost: %v", err)
+	return fallback
+}
+
+func getenvIntDefault(key string, fallback int) int {
+	if value := os.Getenv(key); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			return parsed
+		}
 	}
+	return fallback
+}
 
-	client := mqtt.NewClient(opts)
-	token := client.Connect()
-	if ok := token.WaitTimeout(10 * time.Second); !ok {
-		log.Fatal("mqtt connect timeout")
+func getenvDurationDefault(key string, fallback time.Duration) time.Duration {
+	if value := os.Getenv(key); value != "" {
+		if parsed, err := time.ParseDuration(value); err == nil {
+			return parsed
+		}
 	}
-	if err := token.Error(); err != nil {
-		log.Fatalf("mqtt connect failed: %v", err)
-	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	<-ctx.Done()
-	log.Println("mqtt shutting down")
-
-	client.Disconnect(250)
+	return fallback
 }
